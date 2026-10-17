@@ -333,7 +333,14 @@ class MainActivity : AppCompatActivity(),
             if (isDelta) {
                 tvDialogueText.append(text)
             } else {
-                tvDialogueText.text = text
+                val current = tvDialogueText.text.toString().trim()
+                if (text.startsWith("ইমন স্যার:")) {
+                    tvDialogueText.text = text
+                } else if (current.startsWith("ইমন স্যার:") && !current.contains("র্যাবিট:")) {
+                    tvDialogueText.text = "$current\n\nর্যাবিট: $text"
+                } else {
+                    tvDialogueText.text = if (text.startsWith("র্যাবিট:")) text else "র্যাবিট: $text"
+                }
             }
         }
     }
@@ -341,11 +348,17 @@ class MainActivity : AppCompatActivity(),
     override fun onAudioReceived(audioUrl: String, text: String?) {
         runOnUiThread {
             if (!text.isNullOrBlank()) {
-                tvDialogueText.text = text
+                val current = tvDialogueText.text.toString().trim()
+                if (current.startsWith("ইমন স্যার:") && !current.contains("র্যাবিট:")) {
+                    tvDialogueText.text = "$current\n\nর্যাবিট: $text"
+                } else {
+                    tvDialogueText.text = if (text.startsWith("র্যাবিট:")) text else "র্যাবিট: $text"
+                }
             }
             audioPlayer.playAudioUrl(audioUrl)
         }
     }
+
 
     override fun onActionReceived(action: String, params: JsonObject?) {
         runOnUiThread {

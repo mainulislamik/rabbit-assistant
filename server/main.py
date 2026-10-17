@@ -379,28 +379,28 @@ async def get_audio(filename: str):
 @app.get("/api/updates/check")
 async def check_updates(current_version: int = Query(default=100)):
     """Checks for latest APK update."""
-    latest_apk = None
     apks = sorted(RELEASES_DIR.glob("*.apk"), key=os.path.getmtime, reverse=True)
     
-    # Check if a built APK exists
+    server_version = 102
+    has_update = current_version < server_version
+    
     if apks:
         latest_apk = apks[0]
-        # Calculate SHA256
         sha256 = hashlib.sha256(latest_apk.read_bytes()).hexdigest()
         return {
-            "has_update": True,
-            "version_code": APP_VERSION_CODE + 1,
-            "version_name": f"1.0.{len(apks)}",
+            "has_update": has_update,
+            "version_code": server_version,
+            "version_name": "1.0.5",
             "apk_url": f"/api/updates/download/{latest_apk.name}",
-            "release_notes": "Rabbit AI Self-Updated Engine - Performance improvements, new Bengali intents, and enhanced voice synthesis.",
+            "release_notes": "Rabbit AI Self-Updated Engine - Live synchronized dual-screen dialogue and unknown app install permission handling.",
             "sha256": sha256,
             "mandatory": False
         }
     
     return {
         "has_update": False,
-        "version_code": APP_VERSION_CODE,
-        "version_name": APP_VERSION_NAME,
+        "version_code": server_version,
+        "version_name": "1.0.5",
         "apk_url": None,
         "release_notes": "Rabbit is currently up to date.",
         "mandatory": False

@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.os.Handler
+
 import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -173,7 +175,20 @@ class UpdateManager(
         }
 
         try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (!context.packageManager.canRequestPackageInstalls()) {
+                    val manageIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(manageIntent)
+                    listener.onUpdateError("স্বয়ংক্রিয় আপডেটের জন্য 'Install unknown apps' পারমিশন অন করুন।")
+                    return
+                }
+            }
+
             val apkUri: Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+
                 FileProvider.getUriForFile(
                     context,
                     "${context.packageName}.provider",
