@@ -372,15 +372,19 @@ def launch_desktop_app(target: str, **kwargs) -> Dict[str, Any]:
     from ubuntu_executor import handle_ubuntu_intent
     target_lower = target.lower()
     
-    if "music" in target_lower or "lofi" in target_lower or "গান" in target_lower:
+    if "youtube" in target_lower or "ইউটিউব" in target_lower:
+        url = "https://www.youtube.com"
+        ok, out = handle_ubuntu_intent("UBUNTU_OPEN_APP", {"url": url})
+        return {"target": target, "action": "open_youtube", "success": ok, "message": "গুগল ক্রোমে ইউটিউব ওপেন করা হয়েছে।"}
+    elif "music" in target_lower or "lofi" in target_lower or "গান" in target_lower:
         url = "https://www.youtube.com/results?search_query=lofi+coding+music+live"
         ok, out = handle_ubuntu_intent("UBUNTU_OPEN_APP", {"url": url})
         return {"target": target, "action": "open_music", "success": ok, "message": "ইউটিউবে ব্যাকগ্রাউন্ড কোডিং মিউজিক চালু করা হয়েছে।"}
     elif "vscode" in target_lower or "code" in target_lower:
         ok, out = handle_ubuntu_intent("UBUNTU_OPEN_APP", {"app": "code"})
         return {"target": target, "action": "open_vscode", "success": ok, "message": "ভিএস কোড এডিটর লঞ্চ করা হয়েছে।"}
-    elif "chrome" in target_lower or "browser" in target_lower:
-        ok, out = handle_ubuntu_intent("UBUNTU_OPEN_APP", {"app": "chrome"})
+    elif "chrome" in target_lower or "browser" in target_lower or "http" in target_lower:
+        ok, out = handle_ubuntu_intent("UBUNTU_OPEN_APP", {"app": "chrome", "url": target if "http" in target else ""})
         return {"target": target, "action": "open_chrome", "success": ok, "message": "গুগল ক্রোম ব্রাউজার ওপেন করা হয়েছে।"}
     else:
         ok, out = handle_ubuntu_intent("UBUNTU_OPEN_APP", {"app": target})

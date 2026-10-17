@@ -76,8 +76,11 @@ def handle_ubuntu_intent(action: str, params: Dict[str, Any] = None) -> Tuple[bo
         app_name = params.get("app_name", params.get("app", "")).lower()
         url = params.get("url", "")
         
-        if "chrome" in app_name or "browser" in app_name or url:
-            target_url = url if url else "https://google.com"
+        if "youtube" in app_name or "ইউটিউব" in app_name:
+            target_url = url if url else "https://www.youtube.com"
+            cmd = f'google-chrome --ozone-platform=wayland "{target_url}" > /dev/null 2>&1 &'
+        elif "chrome" in app_name or "browser" in app_name or url or "http" in app_name:
+            target_url = url if url else (app_name if "http" in app_name else "https://google.com")
             cmd = f'google-chrome --ozone-platform=wayland "{target_url}" > /dev/null 2>&1 &'
         elif "code" in app_name or "vscode" in app_name:
             cmd = 'code > /dev/null 2>&1 &'

@@ -288,8 +288,8 @@ async def query_llm_agentic(prompt: str, on_tool_callback=None) -> tuple[str, li
         "1. Etiquette: Always address Imon Sir with highest honor and respect as 'ইমন স্যার' (never use 'ভাই' or informal address).\n"
         "2. Language: Reply strictly in elegant, polite, natural Bengali script (no English/Banglish in spoken dialogue).\n"
         "3. Full Power: You have complete access to terminal/bash, file system, git, system health, web search, personal memory (CV/AdSense/projects), desktop app launcher, and autonomous dev team tools.\n"
-        "4. Tool Usage: When Sir asks you to check system status, run bash commands, read or modify code/files, check git or docker, find live news/weather/facts, recall personal memory, launch desktop apps or music, or dispatch the dev team, execute the necessary tool immediately. Inspect the output and synthesize a crystal-clear, respectful Bengali response.\n"
-        "5. Efficiency: Complete tool executions within 1-3 turns and immediately provide the final answer to Imon Sir."
+        "4. Tool Usage: When Sir asks you to check system status, run bash commands, read or modify code/files, check git or docker, find live news/weather/facts, recall personal memory, launch desktop apps or music, or dispatch the dev team, execute the necessary tool immediately. When Sir asks to open YouTube, Chrome, browser, VS Code, music, or applications on PC, IMMEDIATELY call `launch_desktop_app(target=...)` in your very first turn without searching codebase files. Inspect the output and synthesize a crystal-clear, respectful Bengali response.\n"
+        "5. Efficiency: Complete tool executions within 1-2 turns and immediately provide the final answer to Imon Sir."
     )
 
     messages = [
@@ -299,7 +299,7 @@ async def query_llm_agentic(prompt: str, on_tool_callback=None) -> tuple[str, li
     ]
 
     async with httpx.AsyncClient(timeout=45.0) as client:
-        for turn in range(4):
+        for turn in range(5):
             try:
                 resp = await client.post(
                     "http://127.0.0.1:20128/v1/chat/completions",
