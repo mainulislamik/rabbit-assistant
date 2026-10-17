@@ -103,6 +103,8 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/releases", StaticFiles(directory=str(RELEASES_DIR)), name="releases")
+
 
 # ---------------------------------------------------------------------------
 # Speech Synthesis (TTS Engine)
