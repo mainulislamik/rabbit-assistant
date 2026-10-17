@@ -431,12 +431,75 @@ async def evolve_system(data: Dict[str, Any], background_tasks: BackgroundTasks)
     }
 
 # ---------------------------------------------------------------------------
-# Real-Time Voice WebSocket (/ws/voice)
+# Multi-Device Connection & Real-Time Sync Manager
+# ---------------------------------------------------------------------------
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+        self.recent_history: List[dict] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        logger.info(f"Client connected. Total active connections: {len(self.active_connections)}")
+        
+        # Broadcast connection count
+        await self.broadcast_device_count()
+        
+        # Replay recent history to newly connected client
+        for item in self.recent_history[-8:]:
+            try:
+                await websocket.send_json(item)
+            except Exception:
+                pass
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+            logger.info(f"Client disconnected. Remaining connections: {len(self.active_connections)}")
+
+    async def broadcast(self, data: dict):
+        # Cache dialogue items in history buffer
+        if data.get("type") in ("user_text", "speech_response", "action", "ubuntu_result"):
+            self.recent_history.append(data)
+            if len(self.recent_history) > 30:
+                self.recent_history.pop(0)
+
+        dead = []
+        for connection in list(self.active_connections):
+            try:
+                await connection.send_json(data)
+            except Exception as e:
+                logger.warning(f"Broadcast error on client: {e}")
+                dead.append(connection)
+        for dc in dead:
+            self.disconnect(dc)
+
+    async def broadcast_device_count(self):
+        count = len(self.active_connections)
+        label = f"{count} DEVICES SYNCED" if count > 1 else "1 DEVICE CONNECTED"
+        dead = []
+        for connection in list(self.active_connections):
+            try:
+                await connection.send_json({
+                    "type": "telemetry",
+                    "client_count": count,
+                    "label": label
+                })
+            except Exception:
+                dead.append(connection)
+        for dc in dead:
+            self.disconnect(dc)
+
+manager = ConnectionManager()
+
+
+# ---------------------------------------------------------------------------
+# Real-Time Voice WebSocket (/ws/voice) - Multi-Device Broadcast
 # ---------------------------------------------------------------------------
 @app.websocket("/ws/voice")
 async def websocket_voice_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    logger.info("Android Client connected to /ws/voice")
+    await manager.connect(websocket)
     
     try:
         # Welcome message
@@ -444,7 +507,7 @@ async def websocket_voice_endpoint(websocket: WebSocket):
         welcome_audio = await synthesize_bangla_speech(welcome_text)
         welcome_path = f"/api/audio/{welcome_audio.name}" if welcome_audio else None
         
-        # Notify clients (both Android and Web)
+        # Send initial ready state to this connecting client
         await websocket.send_json({
             "type": "connected",
             "message": welcome_text,
@@ -472,8 +535,15 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                 if not user_text:
                     continue
 
-                logger.info(f"User voice input: {user_text}")
-                await websocket.send_json({"type": "state", "state": "thinking"})
+                logger.info(f"User input received: {user_text}")
+                
+                # Broadcast user prompt to all screens (PC Web + Android Phone)
+                await manager.broadcast({
+                    "type": "user_text",
+                    "sender": "ইমন স্যার",
+                    "text": user_text
+                })
+                await manager.broadcast({"type": "state", "state": "thinking"})
 
                 # Query Ultra-fast LLM Brain
                 try:
@@ -489,7 +559,7 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                     act_name = action_data.get("action", "")
                     params = action_data.get("params", {})
                     logger.info(f"Emitting device action: {action_data}")
-                    await websocket.send_json({
+                    await manager.broadcast({
                         "type": "action",
                         "action": act_name,
                         "params": params
@@ -497,20 +567,20 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                     if is_ubuntu_action(act_name):
                         logger.info(f"Executing Ubuntu host action from WS: {act_name}")
                         ok, out = handle_ubuntu_intent(act_name, params)
-                        await websocket.send_json({
+                        await manager.broadcast({
                             "type": "ubuntu_result",
                             "action": act_name,
                             "success": ok,
                             "output": out
                         })
 
-                # Stream audio reply
-                await websocket.send_json({"type": "state", "state": "speaking"})
+                # Stream audio reply to all connected screens
+                await manager.broadcast({"type": "state", "state": "speaking"})
                 audio_file = await synthesize_bangla_speech(spoken_text)
                 audio_path = f"/api/audio/{audio_file.name}" if audio_file else None
                 
-                # Send speech_response (for Web HUD)
-                await websocket.send_json({
+                # Send speech_response (for Web HUD & dialogue sync)
+                await manager.broadcast({
                     "type": "speech_response",
                     "text": spoken_text,
                     "url": audio_path,
@@ -519,22 +589,26 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                 })
                 # Send audio (for Android native client)
                 if audio_path:
-                    await websocket.send_json({
+                    await manager.broadcast({
                         "type": "audio",
                         "url": audio_path,
                         "audio_url": audio_path,
                         "text": spoken_text
                     })
-                await websocket.send_json({"type": "state", "state": "idle"})
-
+                await manager.broadcast({"type": "state", "state": "idle"})
 
             elif event_type == "ping":
                 await websocket.send_json({"type": "pong", "time": time.time()})
 
     except WebSocketDisconnect:
         logger.info("Client disconnected from /ws/voice")
+        manager.disconnect(websocket)
+        await manager.broadcast_device_count()
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
+        manager.disconnect(websocket)
+        await manager.broadcast_device_count()
+
 
 # ---------------------------------------------------------------------------
 # Iron Man Arc-Reactor JARVIS Web HUD
@@ -688,7 +762,26 @@ async def jarvis_hud():
             font-family: 'Orbitron', monospace;
         }
 
+        .chip-btn {
+            background: rgba(0, 240, 255, 0.08);
+            border: 1px solid rgba(0, 240, 255, 0.3);
+            color: #bae6fd;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            font-family: 'Hind Siliguri', sans-serif;
+            transition: all 0.2s ease;
+        }
+        .chip-btn:hover {
+            background: rgba(0, 240, 255, 0.25);
+            border-color: var(--cyan);
+            color: #ffffff;
+            box-shadow: 0 0 10px var(--cyan-glow);
+        }
+
         /* Controls */
+
         .controls {
             display: flex;
             gap: 15px;
@@ -747,12 +840,20 @@ async def jarvis_hud():
     </div>
 
     <div class="terminal-box">
-        <div class="hud-label">VOICE DIALOGUE & TELEMETRY</div>
+        <div class="hud-label">VOICE DIALOGUE & TELEMETRY [PC + MOBILE SYNCED]</div>
         <div class="transcript-text" id="display-text">"আসসালামু আলাইকুম ইমন স্যার! আমি র্যাবিট। আমি আপনার সকল নির্দেশ পালনের জন্য প্রস্তুত।"</div>
         <div id="action-container"></div>
 
+        <div style="display:flex; flex-wrap:wrap; gap:8px; margin: 15px 0 10px 0;">
+            <button class="chip-btn" onclick="sendQuickText('উবুন্টু সিস্টেম স্ট্যাটাস কেমন?')">💻 উবুন্টু স্ট্যাটাস</button>
+            <button class="chip-btn" onclick="sendQuickText('ভলিউম বাড়াও')">🔊 ভলিউম +</button>
+            <button class="chip-btn" onclick="sendQuickText('ভলিউম কমাও')">🔉 ভলিউম -</button>
+            <button class="chip-btn" onclick="sendQuickText('স্ক্রিনশট নাও')">📸 স্ক্রিনশট</button>
+            <button class="chip-btn" onclick="sendQuickText('তুমি কেমন আছো?')">⚡ চেক হেলথ</button>
+        </div>
+
         <div class="controls">
-            <input type="text" class="input-bar" id="text-input" placeholder="বাংলায় লিখুন বা উপরে র্যাবিট কোরে চাপ দিয়ে কথা বলুন..." onkeypress="handleKey(event)">
+            <input type="text" class="input-bar" id="text-input" placeholder="বাংলায় লিখুন বা উপরে র্যাবিট কোরে চাপ দিয়ে কথা বলুন..." onkeypress="handleKey(event)">
             <button class="btn-jarvis" onclick="sendInput()">SEND</button>
             <button class="btn-jarvis" style="background: transparent; border: 1px solid var(--cyan); color: var(--cyan);" onclick="toggleSpeech()">MIC</button>
         </div>
@@ -769,6 +870,14 @@ async def jarvis_hud():
         let recognition = null;
         let isListening = false;
 
+        function sendQuickText(txt) {
+            if (!txt) return;
+            document.getElementById('display-text').innerHTML = `<span style="color:var(--gold);font-weight:bold;">ইমন স্যার:</span> ${txt}`;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'user_text', text: txt }));
+            }
+        }
+
         function connectWS() {
             ws = new WebSocket(wsUrl);
             ws.onopen = () => {
@@ -776,8 +885,12 @@ async def jarvis_hud():
             };
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                if (data.type === 'ready' || data.type === 'speech_response') {
-                    document.getElementById('display-text').innerText = data.text || data.message;
+                if (data.type === 'user_text') {
+                    document.getElementById('display-text').innerHTML = `<span style="color:var(--gold);font-weight:bold;">${data.sender || 'ইমন স্যার'}:</span> ${data.text}`;
+                    document.getElementById('system-status').innerText = 'THINKING...';
+                } else if (data.type === 'ready' || data.type === 'speech_response') {
+                    const txt = data.text || data.message || '';
+                    document.getElementById('display-text').innerHTML = `<span style="color:var(--cyan);font-weight:bold;">র্যাবিট:</span> ${txt}`;
                     if (data.audio_url) {
                         audioPlayer.src = data.audio_url;
                         audioPlayer.play().catch(e => console.log('Audio autoplay prevented:', e));
@@ -787,14 +900,17 @@ async def jarvis_hud():
                     actBox.innerHTML = `<span class="action-tag">ACTION EXECUTED: ${data.action}</span>`;
                 } else if (data.type === 'state') {
                     document.getElementById('system-status').innerText = data.state.toUpperCase();
+                } else if (data.type === 'telemetry') {
+                    document.getElementById('system-status').innerText = data.label;
                 }
             };
             ws.onclose = () => {
                 document.getElementById('system-status').innerText = 'DISCONNECTED (RETRYING)';
-                setTimeout(connectWS, 3000);
+                setTimeout(connectWS, 2000);
             };
         }
         connectWS();
+
 
         // Browser Native Speech Recognition for Web testing
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
