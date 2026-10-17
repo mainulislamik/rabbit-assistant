@@ -114,7 +114,7 @@
     </FrameLayout>
 
     <!-- Dialogue & Bengali Text Box -->
-    <androidx.cardview.widget.CardView
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/dialogueCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -122,6 +122,8 @@
         app:cardBackgroundColor="@color/bg_surface"
         app:cardCornerRadius="16dp"
         app:cardElevation="6dp"
+        app:strokeWidth="1dp"
+        app:strokeColor="@color/cyan_glow"
         app:layout_constraintBottom_toTopOf="@id/quickActionsScroll">
 
         <LinearLayout
@@ -172,7 +174,7 @@
                 android:textSize="17sp"
                 android:lineSpacingExtra="4dp" />
         </LinearLayout>
-    </androidx.cardview.widget.CardView>
+    </com.google.android.material.card.MaterialCardView>
 
     <!-- Quick Action Chips -->
     <HorizontalScrollView

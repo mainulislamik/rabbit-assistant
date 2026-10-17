@@ -64,13 +64,17 @@ class MainActivity : AppCompatActivity(),
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        try {
+            setContentView(R.layout.activity_main)
 
-        initViews()
-        initServices()
-        initAnimations()
-        checkPermissions()
-        startBackgroundService()
+            initViews()
+            initServices()
+            initAnimations()
+            checkPermissions()
+            startBackgroundService()
+        } catch (t: Throwable) {
+            Log.e(tag, "Fatal error in onCreate", t)
+        }
     }
 
     private fun initViews() {
@@ -186,6 +190,11 @@ class MainActivity : AppCompatActivity(),
     }
 
     private fun handleCoreTapped() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), permissionReqCode)
+            return
+        }
+
         if (speechManager.isCurrentlyListening()) {
             speechManager.stopListening()
             updateUiState("idle", "লিসেনিং স্থগিত করা হয়েছে।")

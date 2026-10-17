@@ -32,14 +32,16 @@ class SpeechRecognizerManager(
     }
 
     private fun initRecognizer() {
-        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            Log.e(tag, "Speech recognition is not available on this device")
-            listener.onSpeechError(-1, "স্পিচ রিকগনিশন ডিভাইসটিতে সমর্থিত নয়।")
-            return
-        }
+        try {
+            if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+                Log.e(tag, "Speech recognition is not available on this device")
+                listener.onSpeechError(-1, "স্পিচ রিকগনিশন ডিভাইসটিতে সমর্থিত নয়।")
+                return
+            }
 
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-            setRecognitionListener(object : RecognitionListener {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+                setRecognitionListener(object : RecognitionListener {
+
                 override fun onReadyForSpeech(params: Bundle?) {
                     isListening = true
                     listener.onSpeechReady()
@@ -99,6 +101,9 @@ class SpeechRecognizerManager(
 
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
+        } catch (e: Exception) {
+            Log.e(tag, "Exception during SpeechRecognizer initialization", e)
+            listener.onSpeechError(-2, "স্পিচ রিকগনিশন শুরু করতে সমস্যা হয়েছে।")
         }
     }
 
