@@ -432,6 +432,39 @@ async def analyze_image_with_vision(image_base64: str, prompt: str = "এই ছ
     return f"ছবিটি বিশ্লেষণ করার সময় সমস্যা হয়েছে: {res.get('error', 'অজানা ত্রুটি')}"
 
 # ---------------------------------------------------------------------------
+# Tool 11: Network & MikroTik Sentinel
+# ---------------------------------------------------------------------------
+def inspect_network_health(**kwargs) -> Dict[str, Any]:
+    """Inspect local MikroTik router gateway latency, public internet health, and connected LAN devices."""
+    try:
+        from network_sentinel import check_network_health
+        return check_network_health()
+    except Exception as e:
+        return {"error": str(e), "health": "UNKNOWN"}
+
+# ---------------------------------------------------------------------------
+# Tool 12: Code Sentinel & Project Syntax Auditor
+# ---------------------------------------------------------------------------
+def audit_project_code(project_path: str = "/home/imon/rabbit-assistant", **kwargs) -> Dict[str, Any]:
+    """Audit project code quality, check for Python/syntax errors, and review uncommitted git diffs."""
+    try:
+        from code_sentinel import run_project_code_audit
+        return run_project_code_audit(project_path)
+    except Exception as e:
+        return {"error": str(e), "healthy": False}
+
+# ---------------------------------------------------------------------------
+# Tool 13: Remote Channel Notification & Alert Dispatcher
+# ---------------------------------------------------------------------------
+def send_remote_notification(message: str, channel: str = "all", level: str = "info", **kwargs) -> Dict[str, Any]:
+    """Send an alert or notification to remote channels (Telegram, WhatsApp, Webhooks) and logs."""
+    try:
+        from rabbit_bridge import dispatch_remote_alert
+        return dispatch_remote_alert(message, channel, level)
+    except Exception as e:
+        return {"error": str(e), "status": "failed"}
+
+# ---------------------------------------------------------------------------
 # Tool Specifications for LLM Function Calling (OpenAI / Gemini format)
 # ---------------------------------------------------------------------------
 RABBIT_TOOL_SPECS = [
@@ -667,6 +700,58 @@ RABBIT_TOOL_SPECS = [
                 "required": ["image_base64"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "inspect_network_health",
+            "description": "Inspect local MikroTik router gateway latency, internet connectivity, and connected LAN devices.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "audit_project_code",
+            "description": "Run an automated code health audit on a local project (checks Python syntax errors, git modified files, branch).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "project_path": {
+                        "type": "string",
+                        "description": "Absolute path to project directory, default '/home/imon/rabbit-assistant'."
+                    }
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_remote_notification",
+            "description": "Send a notification or alert to remote channels (Telegram, WhatsApp, or local alert journal).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "Alert message to send."
+                    },
+                    "channel": {
+                        "type": "string",
+                        "description": "Destination channel ('telegram', 'whatsapp', 'all')."
+                    },
+                    "level": {
+                        "type": "string",
+                        "description": "Alert level ('info', 'warning', 'critical')."
+                    }
+                },
+                "required": ["message"]
+            }
+        }
     }
 ]
 
@@ -688,6 +773,9 @@ TOOL_MAP = {
     "dispatch_dev_team": dispatch_dev_team,
     "launch_desktop_app": launch_desktop_app,
     "analyze_visual_image": analyze_visual_image,
+    "inspect_network_health": inspect_network_health,
+    "audit_project_code": audit_project_code,
+    "send_remote_notification": send_remote_notification,
 }
 
 def dispatch_tool(tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:

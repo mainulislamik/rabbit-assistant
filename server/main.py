@@ -681,6 +681,49 @@ async def api_vision_analyze(req: VisionRequest):
         "audio_url": audio_url
     }
 
+class BridgeWebhookRequest(BaseModel):
+    sender: str = "Telegram"
+    text: str
+    channel: str = "telegram"
+
+@app.post("/api/bridge/webhook")
+async def bridge_webhook(req: BridgeWebhookRequest):
+    """Bridge endpoint for external messaging channels (Telegram/WhatsApp)."""
+    reply, executed_tools = await query_llm_agentic(req.text)
+    spoken_text, action = extract_actions(reply)
+    audio = await synthesize_bangla_speech(spoken_text)
+    audio_url = f"/api/audio/{audio.name}" if audio else None
+    
+    # Broadcast to HUD and Mobile clients
+    await manager.broadcast({
+        "type": "chat_response",
+        "sender": f"র্যাবিট ({req.sender})",
+        "reply": reply,
+        "spoken": spoken_text,
+        "audio_url": audio_url
+    })
+    
+    return {
+        "status": "ok",
+        "sender": req.sender,
+        "reply": reply,
+        "spoken": spoken_text,
+        "audio_url": audio_url,
+        "executed_tools": executed_tools
+    }
+
+@app.get("/api/network/health")
+async def api_network_health():
+    """Inspects MikroTik LAN and WAN health."""
+    import network_sentinel
+    return network_sentinel.check_network_health()
+
+@app.get("/api/code/audit")
+async def api_code_audit(project_path: str = "/home/imon/rabbit-assistant"):
+    """Runs automated code syntax & git health check."""
+    import code_sentinel
+    return code_sentinel.run_project_code_audit(project_path)
+
 
 # ---------------------------------------------------------------------------
 # Multi-Device Connection & Real-Time Sync Manager
