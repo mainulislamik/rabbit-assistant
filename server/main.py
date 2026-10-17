@@ -359,12 +359,35 @@ async def chat_endpoint(data: Dict[str, Any]):
     audio_file = await synthesize_bangla_speech(spoken_text)
     audio_url = f"/api/audio/{audio_file.name}" if audio_file else None
 
+    # Broadcast to all connected clients (PC + Mobile live sync)
+    await manager.broadcast({
+        "type": "user_text",
+        "sender": "ইমন স্যার",
+        "text": prompt
+    })
+    await manager.broadcast({
+        "type": "speech_response",
+        "text": spoken_text,
+        "url": audio_url,
+        "audio_url": audio_url,
+        "state": "idle"
+    })
+    if audio_url:
+        await manager.broadcast({
+            "type": "audio",
+            "url": audio_url,
+            "audio_url": audio_url,
+            "text": spoken_text
+        })
+    await manager.broadcast({"type": "state", "state": "idle"})
+
     return {
         "reply": spoken_text,
         "raw": raw_reply,
         "action": action_data,
         "audio_url": audio_url
     }
+
 
 @app.get("/api/audio/{filename}")
 async def get_audio(filename: str):
