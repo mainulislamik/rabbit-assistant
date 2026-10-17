@@ -23,8 +23,11 @@ import websockets
 import edge_tts
 import urllib.request
 import urllib.parse
+import re
+import httpx
 
 from ubuntu_executor import handle_ubuntu_intent, is_ubuntu_action
+
 
 
 # ---------------------------------------------------------------------------
@@ -167,8 +170,9 @@ class HermesSessionBridge:
         self.lock = asyncio.Lock()
 
     async def ensure_connected(self):
-        if self.ws is not None and not self.ws.closed:
+        if self.ws is not None and getattr(self.ws, "close_code", None) is None:
             return
+
 
         try:
             logger.info("Connecting to Hermes Agent WebSocket...")
@@ -248,6 +252,55 @@ class HermesSessionBridge:
 
 hermes_bridge = HermesSessionBridge()
 
+OMNI_KEY = None
+try:
+    if os.path.exists('/home/imon/.hermes/agent-team/dev-team.sh'):
+        with open('/home/imon/.hermes/agent-team/dev-team.sh') as f:
+            km = re.search(r'OMNI_KEY="([^"]+)"', f.read())
+            if km:
+                OMNI_KEY = km.group(1)
+except Exception as e:
+    logger.warning(f"Failed to read OMNI_KEY: {e}")
+
+async def query_llm(prompt: str) -> str:
+    """Queries the ultra-fast OmniRoute LLM with pure Bengali and Ubuntu OS awareness."""
+    if OMNI_KEY:
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    "http://127.0.0.1:20128/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {OMNI_KEY}", "Content-Type": "application/json"},
+                    json={
+                        "model": "agy/gemini-3.8-flash-tiered",
+                        "messages": [
+                            {"role": "system", "content": RABBIT_SYSTEM_PROMPT},
+                            {"role": "user", "content": prompt}
+                        ],
+                        "max_tokens": 400,
+                        "temperature": 0.3
+                    },
+                    timeout=20.0
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    logger.info(f"LLM query success: {content[:80]}...")
+                    return content
+                else:
+                    logger.warning(f"OmniRoute HTTP {resp.status_code}: {resp.text}")
+        except Exception as e:
+            logger.error(f"OmniRoute error: {e}")
+
+    # Fallback to local Hermes bridge
+    try:
+        reply = await hermes_bridge.query(prompt)
+        if reply:
+            return reply
+    except Exception as e:
+        logger.error(f"Hermes bridge fallback failed: {e}")
+
+    return "ইমন স্যার, আমি আপনার নির্দেশ পেয়েছি। সিস্টেম কার্যকর করতে প্রস্তুত।"
+
 def extract_actions(reply: str):
     """Extracts JSON action block from LLM reply and cleans up the speech text."""
     clean_text = reply
@@ -284,8 +337,9 @@ async def chat_endpoint(data: Dict[str, Any]):
         raise HTTPException(status_code=400, detail="Prompt is required")
         
     try:
-        raw_reply = await hermes_bridge.query(prompt)
+        raw_reply = await query_llm(prompt)
     except Exception as e:
+
         logger.error(f"Hermes query failed: {e}")
         raw_reply = "ইমন স্যার, হার্মিস কোরের সাথে সংযোগ স্থাপনে সাময়িক সমস্যা হচ্ছে। আমি পুনরায় চেষ্টা করছি।"
         
@@ -388,10 +442,20 @@ async def websocket_voice_endpoint(websocket: WebSocket):
         # Welcome message
         welcome_text = "আসসালামু আলাইকুম ইমন স্যার! আমি র্যাবিট। আমি আপনার সকল নির্দেশ পালনের জন্য প্রস্তুত।"
         welcome_audio = await synthesize_bangla_speech(welcome_text)
+        welcome_path = f"/api/audio/{welcome_audio.name}" if welcome_audio else None
+        
+        # Notify clients (both Android and Web)
+        await websocket.send_json({
+            "type": "connected",
+            "message": welcome_text,
+            "url": welcome_path,
+            "audio_url": welcome_path
+        })
         await websocket.send_json({
             "type": "ready",
             "message": welcome_text,
-            "audio_url": f"/api/audio/{welcome_audio.name}" if welcome_audio else None
+            "url": welcome_path,
+            "audio_url": welcome_path
         })
         
         while True:
@@ -411,11 +475,11 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                 logger.info(f"User voice input: {user_text}")
                 await websocket.send_json({"type": "state", "state": "thinking"})
 
-                # Query Hermes Agent Brain
+                # Query Ultra-fast LLM Brain
                 try:
-                    llm_reply = await hermes_bridge.query(user_text)
+                    llm_reply = await query_llm(user_text)
                 except Exception as e:
-                    logger.error(f"Hermes query failed in WS: {e}")
+                    logger.error(f"LLM query failed in WS: {e}")
                     llm_reply = "ইমন স্যার, আমি আপনার নির্দেশ পেয়েছি। সিস্টেম কার্যকর করতে প্রস্তুত।"
 
                 spoken_text, action_data = extract_actions(llm_reply)
@@ -440,17 +504,29 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                             "output": out
                         })
 
-
                 # Stream audio reply
                 await websocket.send_json({"type": "state", "state": "speaking"})
                 audio_file = await synthesize_bangla_speech(spoken_text)
+                audio_path = f"/api/audio/{audio_file.name}" if audio_file else None
                 
+                # Send speech_response (for Web HUD)
                 await websocket.send_json({
                     "type": "speech_response",
                     "text": spoken_text,
-                    "audio_url": f"/api/audio/{audio_file.name}" if audio_file else None,
+                    "url": audio_path,
+                    "audio_url": audio_path,
                     "state": "idle"
                 })
+                # Send audio (for Android native client)
+                if audio_path:
+                    await websocket.send_json({
+                        "type": "audio",
+                        "url": audio_path,
+                        "audio_url": audio_path,
+                        "text": spoken_text
+                    })
+                await websocket.send_json({"type": "state", "state": "idle"})
+
 
             elif event_type == "ping":
                 await websocket.send_json({"type": "pong", "time": time.time()})
