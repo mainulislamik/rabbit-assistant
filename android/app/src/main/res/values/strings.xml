@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">Rabbit Assistant</string>
+    <string name="rabbit_tagline">JARVIS AI OS FOR IMON SIR</string>
+    <string name="status_ready">র্যাবিট সক্রিয় এবং প্রস্তুত</string>
+    <string name="status_listening">শুনছি, বলুন স্যার...</string>
+    <string name="status_thinking">প্রসেস করছি...</string>
+    <string name="status_speaking">উত্তর দিচ্ছি...</string>
+    <string name="default_server_ip">192.168.0.100</string>
+    <string name="default_server_port">8899</string>
+    <string name="tap_to_speak">র্যাবিট কোরে চাপ দিয়ে কথা বলুন</string>
+    <string name="update_available">র্যাবিট-এর নতুন আপডেট পাওয়া গেছে!</string>
+    <string name="downloading_update">আপডেট ডাউনলোড হচ্ছে...</string>
+    <string name="update_ready">আপডেট প্রস্তুত। ইনস্টল করতে ট্যাপ করুন।</string>
+</resources>

@@ -1,0 +1,77 @@
+name: Build and Release Rabbit Assistant APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version Name (e.g. 1.0.1)'
+        required: false
+        default: '1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Grant Execute Permission to Gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build Debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Build Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease --stacktrace
+
+      - name: Prepare APK Artifacts
+        run: |
+          mkdir -p output
+          cp android/app/build/outputs/apk/debug/app-debug.apk output/Rabbit-Assistant-debug.apk
+          if [ -f android/app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp android/app/build/outputs/apk/release/app-release-unsigned.apk output/Rabbit-Assistant-release.apk
+          elif [ -f android/app/build/outputs/apk/release/app-release.apk ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk output/Rabbit-Assistant-release.apk
+          fi
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rabbit-Assistant-debug
+          path: output/Rabbit-Assistant-debug.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/heads/main')
+        with:
+          tag_name: v1.0.0-${{ github.run_number }}
+          name: Rabbit Assistant v1.0.${{ github.run_number }} (Jarvis Bangla AI OS)
+          body: |
+            ## 🐰 Rabbit Assistant // Iron Man JARVIS Voice OS for Imon Sir
+            - **Bangla Speech-to-Speech**: Full natural conversation in Bengali with Edge-TTS (`bn-BD-PradeepNeural`).
+            - **Device Automation**: Flashlight, volume, apps, phone calls, SMS, battery telemetry.
+            - **Self-Evolution & OTA Update**: Self-updating app with automatic APK download and installation.
+            - **Hermes Agent WebSocket Gateway**: Direct connection to your host machine's Hermes Agent.
+          files: |
+            output/Rabbit-Assistant-debug.apk
+            output/Rabbit-Assistant-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

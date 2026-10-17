@@ -1,0 +1,27 @@
+# Android
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+android/app/build/
+android/build/
+android/.gradle/
+
+# Server & Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+server/audio_cache/*.mp3
+!server/audio_cache/.gitkeep
+
+# Releases
+server/releases/*.apk
+!server/releases/.gitkeep

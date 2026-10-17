@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_dark">#050B14</color>
+    <color name="bg_surface">#0A192F</color>
+    <color name="cyan_primary">#00F0FF</color>
+    <color name="cyan_glow">#6600F0FF</color>
+    <color name="gold_accent">#FFB703</color>
+    <color name="gold_glow">#66FFB703</color>
+    <color name="text_white">#F8FAFC</color>
+    <color name="text_dim">#94A3B8</color>
+    <color name="status_listening">#00F0FF</color>
+    <color name="status_thinking">#FFB703</color>
+    <color name="status_speaking">#10B981</color>
+</resources>
