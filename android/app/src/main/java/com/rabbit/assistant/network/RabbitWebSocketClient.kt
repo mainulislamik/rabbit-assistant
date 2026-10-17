@@ -43,6 +43,9 @@ class RabbitWebSocketClient(
         connect()
     }
 
+    fun updateServerConfig(host: String, port: Int) = updateConfig(host, port)
+
+
     fun connect() {
         shouldReconnect = true
         if (isConnected && webSocket != null) return
