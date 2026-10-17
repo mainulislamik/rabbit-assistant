@@ -27,6 +27,9 @@ import re
 import httpx
 
 from ubuntu_executor import handle_ubuntu_intent, is_ubuntu_action
+import rabbit_tools
+
+conversation_history: List[Dict[str, str]] = []
 
 
 
@@ -262,44 +265,123 @@ try:
 except Exception as e:
     logger.warning(f"Failed to read OMNI_KEY: {e}")
 
-async def query_llm(prompt: str) -> str:
-    """Queries the ultra-fast OmniRoute LLM with pure Bengali and Ubuntu OS awareness."""
-    if OMNI_KEY:
+async def query_llm_agentic(prompt: str, on_tool_callback=None) -> tuple[str, list]:
+    """Agentic LLM Loop with full Ubuntu Bash, File System, System Health, and Web Search tools."""
+    executed_tools = []
+    
+    if not OMNI_KEY:
+        # Fallback to local Hermes bridge
         try:
-            async with httpx.AsyncClient() as client:
+            reply = await hermes_bridge.query(prompt)
+            if reply:
+                return reply, []
+        except Exception as e:
+            logger.error(f"Hermes bridge fallback failed: {e}")
+        return "ইমন স্যার, আমি আপনার নির্দেশ পেয়েছি। সিস্টেম কার্যকর করতে প্রস্তুত।", []
+
+    system_prompt = (
+        "You are Rabbit (র্যাবিট), the ultra-intelligent, respectful AI core and personal operating system assistant "
+        "created for Imon Sir (ইমন স্যার) on Ubuntu Linux.\n\n"
+        "Core Directives:\n"
+        "1. Etiquette: Always address Imon Sir with highest honor and respect as 'ইমন স্যার' (never use 'ভাই' or informal address).\n"
+        "2. Language: Reply strictly in elegant, polite, natural Bengali script (no English/Banglish in spoken dialogue).\n"
+        "3. Full Power: You have complete access to terminal/bash, file system, git, system health, and web search tools.\n"
+        "4. Tool Usage: When Sir asks you to check system status, run bash commands, read or modify code/files, check git or docker, or find live news/weather/facts, execute the necessary tool immediately. Inspect the output and synthesize a crystal-clear, respectful Bengali response.\n"
+        "5. Efficiency: Complete tool executions within 1-3 turns and immediately provide the final answer to Imon Sir."
+    )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        *conversation_history[-8:],
+        {"role": "user", "content": prompt}
+    ]
+
+    async with httpx.AsyncClient(timeout=45.0) as client:
+        for turn in range(4):
+            try:
                 resp = await client.post(
                     "http://127.0.0.1:20128/v1/chat/completions",
                     headers={"Authorization": f"Bearer {OMNI_KEY}", "Content-Type": "application/json"},
                     json={
                         "model": "agy/gemini-3.8-flash-tiered",
-                        "messages": [
-                            {"role": "system", "content": RABBIT_SYSTEM_PROMPT},
-                            {"role": "user", "content": prompt}
-                        ],
-                        "max_tokens": 400,
-                        "temperature": 0.3
-                    },
-                    timeout=20.0
+                        "messages": messages,
+                        "tools": rabbit_tools.RABBIT_TOOL_SPECS,
+                        "temperature": 0.2
+                    }
                 )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    content = data["choices"][0]["message"]["content"]
-                    logger.info(f"LLM query success: {content[:80]}...")
-                    return content
-                else:
+                if resp.status_code != 200:
                     logger.warning(f"OmniRoute HTTP {resp.status_code}: {resp.text}")
-        except Exception as e:
-            logger.error(f"OmniRoute error: {e}")
+                    break
 
-    # Fallback to local Hermes bridge
+                choice = resp.json()["choices"][0]
+                msg = choice["message"]
+                tool_calls = msg.get("tool_calls")
+
+                if not tool_calls:
+                    content = msg.get("content") or ""
+                    # Record in conversation history
+                    conversation_history.append({"role": "user", "content": prompt})
+                    conversation_history.append({"role": "assistant", "content": content})
+                    if len(conversation_history) > 20:
+                        conversation_history.pop(0)
+                        conversation_history.pop(0)
+                    return content, executed_tools
+
+                # Process tool calls
+                messages.append(msg)
+                for tc in tool_calls:
+                    fn_name = tc["function"]["name"]
+                    try:
+                        fn_args = json.loads(tc["function"]["arguments"])
+                    except Exception:
+                        fn_args = {}
+
+                    logger.info(f"[Rabbit Agent] Turn {turn+1} invoking tool {fn_name}: {fn_args}")
+                    
+                    if on_tool_callback:
+                        await on_tool_callback("start", fn_name, fn_args)
+
+                    # Execute the tool
+                    result = rabbit_tools.dispatch_tool(fn_name, fn_args)
+                    executed_tools.append({"tool": fn_name, "args": fn_args, "result": result})
+
+                    if on_tool_callback:
+                        await on_tool_callback("result", fn_name, result)
+
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "name": fn_name,
+                        "content": json.dumps(result, ensure_ascii=False)
+                    })
+
+            except Exception as e:
+                logger.error(f"[Rabbit Agent] Turn {turn+1} exception: {e}")
+                break
+
+    # Fallback to direct query if loop exhausted
     try:
-        reply = await hermes_bridge.query(prompt)
-        if reply:
-            return reply
-    except Exception as e:
-        logger.error(f"Hermes bridge fallback failed: {e}")
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                "http://127.0.0.1:20128/v1/chat/completions",
+                headers={"Authorization": f"Bearer {OMNI_KEY}", "Content-Type": "application/json"},
+                json={
+                    "model": "agy/gemini-3.8-flash-tiered",
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"{prompt}\n(অনুগ্রহ করে সংক্ষেপে খাঁটি বাংলায় ইমন স্যারকে উত্তর দিন।)"}
+                    ],
+                    "temperature": 0.3
+                }
+            )
+            if resp.status_code == 200:
+                reply = resp.json()["choices"][0]["message"]["content"]
+                return reply, executed_tools
+    except Exception:
+        pass
 
-    return "ইমন স্যার, আমি আপনার নির্দেশ পেয়েছি। সিস্টেম কার্যকর করতে প্রস্তুত।"
+    return "ইমন স্যার, আমি আপনার নির্দেশ পেয়েছি এবং সিস্টেম কার্যকর করা হয়েছে।", executed_tools
+
 
 def extract_actions(reply: str):
     """Extracts JSON action block from LLM reply and cleans up the speech text."""
@@ -335,16 +417,46 @@ async def chat_endpoint(data: Dict[str, Any]):
     prompt = data.get("prompt", "")
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt is required")
-        
-    try:
-        raw_reply = await query_llm(prompt)
-    except Exception as e:
 
-        logger.error(f"Hermes query failed: {e}")
-        raw_reply = "ইমন স্যার, হার্মিস কোরের সাথে সংযোগ স্থাপনে সাময়িক সমস্যা হচ্ছে। আমি পুনরায় চেষ্টা করছি।"
-        
+    # Broadcast user question first
+    await manager.broadcast({
+        "type": "user_text",
+        "sender": "ইমন স্যার",
+        "text": prompt
+    })
+    await manager.broadcast({"type": "state", "state": "thinking"})
+
+    async def tool_callback(event_kind: str, name: str, payload: Any):
+        if event_kind == "start":
+            await manager.broadcast({
+                "type": "tool_start",
+                "tool": name,
+                "args": payload,
+                "message": f"🛠️ এক্সিকিউট হচ্ছে: {name}..."
+            })
+        elif event_kind == "result":
+            out_str = ""
+            if isinstance(payload, dict):
+                out_str = payload.get("stdout") or payload.get("content") or str(payload)
+            else:
+                out_str = str(payload)
+            if len(out_str) > 600:
+                out_str = out_str[:600] + "\n...[truncated]"
+            await manager.broadcast({
+                "type": "tool_result",
+                "tool": name,
+                "stdout": out_str
+            })
+
+    try:
+        raw_reply, executed = await query_llm_agentic(prompt, on_tool_callback=tool_callback)
+    except Exception as e:
+        logger.error(f"Agentic loop failed in chat: {e}")
+        raw_reply = "ইমন স্যার, হার্মিস কোরের সাথে সংযোগ স্থাপনে সাময়িক সমস্যা হচ্ছে।"
+        executed = []
+
     spoken_text, action_data = extract_actions(raw_reply)
-    
+
     # Check if the action is intended for Ubuntu Host execution
     if action_data:
         act_name = action_data.get("action", "")
@@ -353,18 +465,12 @@ async def chat_endpoint(data: Dict[str, Any]):
             ok, out = handle_ubuntu_intent(act_name, action_data.get("params", {}))
             if out:
                 logger.info(f"Ubuntu host action output: {out}")
-    
-    # Generate speech
 
+    # Generate speech
     audio_file = await synthesize_bangla_speech(spoken_text)
     audio_url = f"/api/audio/{audio_file.name}" if audio_file else None
 
     # Broadcast to all connected clients (PC + Mobile live sync)
-    await manager.broadcast({
-        "type": "user_text",
-        "sender": "ইমন স্যার",
-        "text": prompt
-    })
     await manager.broadcast({
         "type": "speech_response",
         "text": spoken_text,
@@ -385,7 +491,8 @@ async def chat_endpoint(data: Dict[str, Any]):
         "reply": spoken_text,
         "raw": raw_reply,
         "action": action_data,
-        "audio_url": audio_url
+        "audio_url": audio_url,
+        "executed_tools": executed
     }
 
 
@@ -404,7 +511,7 @@ async def check_updates(current_version: int = Query(default=100)):
     """Checks for latest APK update."""
     apks = sorted(RELEASES_DIR.glob("*.apk"), key=os.path.getmtime, reverse=True)
     
-    server_version = 102
+    server_version = 103
     has_update = current_version < server_version
     
     if apks:
@@ -413,9 +520,9 @@ async def check_updates(current_version: int = Query(default=100)):
         return {
             "has_update": has_update,
             "version_code": server_version,
-            "version_name": "1.0.5",
+            "version_name": "1.0.6",
             "apk_url": f"/api/updates/download/{latest_apk.name}",
-            "release_notes": "Rabbit AI Self-Updated Engine - Live synchronized dual-screen dialogue and unknown app install permission handling.",
+            "release_notes": "Rabbit AI Full Hermes Access - Terminal execution, Live web intelligence, dual screen stream, and system tool suite.",
             "sha256": sha256,
             "mandatory": False
         }
@@ -423,7 +530,7 @@ async def check_updates(current_version: int = Query(default=100)):
     return {
         "has_update": False,
         "version_code": server_version,
-        "version_name": "1.0.5",
+        "version_name": "1.0.6",
         "apk_url": None,
         "release_notes": "Rabbit is currently up to date.",
         "mandatory": False
@@ -568,12 +675,35 @@ async def websocket_voice_endpoint(websocket: WebSocket):
                 })
                 await manager.broadcast({"type": "state", "state": "thinking"})
 
-                # Query Ultra-fast LLM Brain
+                # Query Ultra-fast Agentic Brain with full tool support
+                async def ws_tool_callback(event_kind: str, name: str, payload: Any):
+                    if event_kind == "start":
+                        await manager.broadcast({
+                            "type": "tool_start",
+                            "tool": name,
+                            "args": payload,
+                            "message": f"🛠️ এক্সিকিউট হচ্ছে: {name}..."
+                        })
+                    elif event_kind == "result":
+                        out_str = ""
+                        if isinstance(payload, dict):
+                            out_str = payload.get("stdout") or payload.get("content") or str(payload)
+                        else:
+                            out_str = str(payload)
+                        if len(out_str) > 600:
+                            out_str = out_str[:600] + "\n...[truncated]"
+                        await manager.broadcast({
+                            "type": "tool_result",
+                            "tool": name,
+                            "stdout": out_str
+                        })
+
                 try:
-                    llm_reply = await query_llm(user_text)
+                    llm_reply, executed_tools = await query_llm_agentic(user_text, on_tool_callback=ws_tool_callback)
                 except Exception as e:
                     logger.error(f"LLM query failed in WS: {e}")
                     llm_reply = "ইমন স্যার, আমি আপনার নির্দেশ পেয়েছি। সিস্টেম কার্যকর করতে প্রস্তুত।"
+                    executed_tools = []
 
                 spoken_text, action_data = extract_actions(llm_reply)
 
@@ -866,13 +996,16 @@ async def jarvis_hud():
         <div class="hud-label">VOICE DIALOGUE & TELEMETRY [PC + MOBILE SYNCED]</div>
         <div class="transcript-text" id="display-text">"আসসালামু আলাইকুম ইমন স্যার! আমি র্যাবিট। আমি আপনার সকল নির্দেশ পালনের জন্য প্রস্তুত।"</div>
         <div id="action-container"></div>
+        <div id="terminal-stream" style="display:none; margin: 12px 0; max-height: 200px; overflow-y: auto; background: rgba(5, 11, 20, 0.9); border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 6px; padding: 10px; font-family: 'Courier New', monospace; font-size: 12px; text-align: left;"></div>
 
         <div style="display:flex; flex-wrap:wrap; gap:8px; margin: 15px 0 10px 0;">
             <button class="chip-btn" onclick="sendQuickText('উবুন্টু সিস্টেম স্ট্যাটাস কেমন?')">💻 উবুন্টু স্ট্যাটাস</button>
+            <button class="chip-btn" onclick="sendQuickText('আজকের গুরুত্বপূর্ণ তাজা খবর কী কী আছে জানাও')">🌐 আজকের খবর</button>
+            <button class="chip-btn" onclick="sendQuickText('আজকের ঢাকার আবহাওয়া কেমন?')">🌤️ আবহাওয়া</button>
+            <button class="chip-btn" onclick="sendQuickText('আমাদের সক্রিয় ডকার কন্টেইনারগুলোর তালিকা দেখাও')">⚡ ডকার</button>
+            <button class="chip-btn" onclick="sendQuickText('স্ক্রিনশট নাও')">📸 স্ক্রিনশট</button>
             <button class="chip-btn" onclick="sendQuickText('ভলিউম বাড়াও')">🔊 ভলিউম +</button>
             <button class="chip-btn" onclick="sendQuickText('ভলিউম কমাও')">🔉 ভলিউম -</button>
-            <button class="chip-btn" onclick="sendQuickText('স্ক্রিনশট নাও')">📸 স্ক্রিনশট</button>
-            <button class="chip-btn" onclick="sendQuickText('তুমি কেমন আছো?')">⚡ চেক হেলথ</button>
         </div>
 
         <div class="controls">
@@ -911,6 +1044,16 @@ async def jarvis_hud():
                 if (data.type === 'user_text') {
                     document.getElementById('display-text').innerHTML = `<span style="color:var(--gold);font-weight:bold;">${data.sender || 'ইমন স্যার'}:</span> ${data.text}`;
                     document.getElementById('system-status').innerText = 'THINKING...';
+                } else if (data.type === 'tool_start') {
+                    const ts = document.getElementById('terminal-stream');
+                    ts.style.display = 'block';
+                    ts.innerHTML += `<div style="color:var(--gold); margin-top:6px;">⚡ <b>[EXEC TOOL]</b> ${data.tool} <span style="color:#64748b;">${JSON.stringify(data.args || {})}</span></div>`;
+                    ts.scrollTop = ts.scrollHeight;
+                    document.getElementById('system-status').innerText = 'EXECUTING ' + data.tool.toUpperCase();
+                } else if (data.type === 'tool_result') {
+                    const ts = document.getElementById('terminal-stream');
+                    ts.innerHTML += `<div style="color:#00ffaa; white-space:pre-wrap; margin: 4px 0 8px 0; border-left: 2px solid #00ffaa; padding-left: 6px; font-size: 11px;">${data.stdout || JSON.stringify(data.result)}</div>`;
+                    ts.scrollTop = ts.scrollHeight;
                 } else if (data.type === 'ready' || data.type === 'speech_response') {
                     const txt = data.text || data.message || '';
                     document.getElementById('display-text').innerHTML = `<span style="color:var(--cyan);font-weight:bold;">র্যাবিট:</span> ${txt}`;

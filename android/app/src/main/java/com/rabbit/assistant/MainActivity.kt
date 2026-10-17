@@ -363,8 +363,16 @@ class MainActivity : AppCompatActivity(),
     override fun onActionReceived(action: String, params: JsonObject?) {
         runOnUiThread {
             tvActionBadge.visibility = View.VISIBLE
-            tvActionBadge.text = "ACTION: $action"
-            actionHandler.handleAction(action, params)
+            if (action.startsWith("TOOL_START: ")) {
+                val tName = action.removePrefix("TOOL_START: ")
+                tvActionBadge.text = "⚡ RUNNING: $tName"
+            } else if (action.startsWith("TOOL_DONE: ")) {
+                val tName = action.removePrefix("TOOL_DONE: ")
+                tvActionBadge.text = "✓ DONE: $tName"
+            } else {
+                tvActionBadge.text = "ACTION: $action"
+                actionHandler.handleAction(action, params)
+            }
         }
     }
 

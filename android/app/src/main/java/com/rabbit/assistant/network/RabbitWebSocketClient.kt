@@ -119,6 +119,19 @@ class RabbitWebSocketClient(
                     val text = json.get("text")?.asString ?: ""
                     mainHandler.post { listener.onTextReceived("$sender: $text", false) }
                 }
+                "tool_start" -> {
+                    val tool = json.get("tool")?.asString ?: "tool"
+                    mainHandler.post { 
+                        listener.onStateChange("thinking")
+                        listener.onActionReceived("TOOL_START: $tool", null) 
+                    }
+                }
+                "tool_result" -> {
+                    val tool = json.get("tool")?.asString ?: "tool"
+                    mainHandler.post { 
+                        listener.onActionReceived("TOOL_DONE: $tool", null) 
+                    }
+                }
                 "state" -> {
 
                     val state = json.get("state")?.asString ?: "idle"
