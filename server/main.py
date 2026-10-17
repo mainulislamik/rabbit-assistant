@@ -507,12 +507,13 @@ async def get_audio(filename: str):
 # App Self-Update & Evolution Endpoints (Phase 4)
 # ---------------------------------------------------------------------------
 @app.get("/api/updates/check")
-async def check_updates(current_version: int = Query(default=100)):
-    """Checks for latest APK update."""
+async def check_updates(current_version: int = Query(default=100), manual: bool = Query(default=False)):
+    """Checks for latest APK update. Universal Thin Client mode: automatic update nags disabled."""
     apks = sorted(RELEASES_DIR.glob("*.apk"), key=os.path.getmtime, reverse=True)
     
-    server_version = 103
-    has_update = current_version < server_version
+    server_version = 104
+    # Only offer update if user manually requested it in settings
+    has_update = manual and (current_version < server_version)
     
     if apks:
         latest_apk = apks[0]
@@ -520,9 +521,9 @@ async def check_updates(current_version: int = Query(default=100)):
         return {
             "has_update": has_update,
             "version_code": server_version,
-            "version_name": "1.0.6",
+            "version_name": "1.0.7",
             "apk_url": f"/api/updates/download/{latest_apk.name}",
-            "release_notes": "Rabbit AI Full Hermes Access - Terminal execution, Live web intelligence, dual screen stream, and system tool suite.",
+            "release_notes": "Rabbit Universal Thin Client - Zero-install server-driven AI architecture.",
             "sha256": sha256,
             "mandatory": False
         }

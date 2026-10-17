@@ -149,7 +149,7 @@ class MainActivity : AppCompatActivity(),
 
         wsClient.connect()
         isManualUpdateCheck = false
-        triggerSelfUpdateCheck(force = false)
+        // Universal Thin Client: no automatic startup update check
     }
 
 
@@ -303,9 +303,8 @@ class MainActivity : AppCompatActivity(),
             tvConnectionStatus.setBackgroundResource(R.drawable.bg_pill_cyan)
             tvConnectionStatus.setTextColor(ContextCompat.getColor(this, R.color.cyan_primary))
             
-            // Auto check for latest server release on connect (OTA update)
+            // Universal Thin Client: connected and ready (no repetitive update check)
             isManualUpdateCheck = false
-            triggerSelfUpdateCheck(force = false)
         }
     }
 

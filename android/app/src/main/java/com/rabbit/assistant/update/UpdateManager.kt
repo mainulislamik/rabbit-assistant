@@ -38,7 +38,7 @@ class UpdateManager(
 
     fun checkForUpdates(serverHost: String, serverPort: Int, force: Boolean = false) {
         listener.onUpdateCheckStarted()
-        val checkUrl = "http://$serverHost:$serverPort/api/updates/check"
+        val checkUrl = "http://$serverHost:$serverPort/api/updates/check?manual=$force"
         Log.d(tag, "Checking update at $checkUrl")
 
         val request = Request.Builder().url(checkUrl).build()
