@@ -7,13 +7,12 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Log
-import java.util.Locale
 
 class SpeechRecognizerManager(
     private val context: Context,
     private val listener: SpeechCallback
 ) {
-    private val tag = "RabbitSpeech"
+    private val tag = "SpeechRecognizer"
     private var speechRecognizer: SpeechRecognizer? = null
     private var isListening = false
     private var continuousMode = false
@@ -41,66 +40,65 @@ class SpeechRecognizerManager(
 
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
                 setRecognitionListener(object : RecognitionListener {
-
-                override fun onReadyForSpeech(params: Bundle?) {
-                    isListening = true
-                    listener.onSpeechReady()
-                }
-
-                override fun onBeginningOfSpeech() {
-                    Log.d(tag, "User began speaking")
-                }
-
-                override fun onRmsChanged(rmsdB: Float) {
-                    listener.onSpeechRmsChanged(rmsdB)
-                }
-
-                override fun onBufferReceived(buffer: ByteArray?) {}
-
-                override fun onEndOfSpeech() {
-                    isListening = false
-                    listener.onSpeechEnded()
-                }
-
-                override fun onError(error: Int) {
-                    isListening = false
-                    val errorMsg = when (error) {
-                        SpeechRecognizer.ERROR_NO_MATCH -> "কথা স্পষ্ট শোনা যায়নি।"
-                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "কোনো কথা শনাক্ত হয়নি।"
-                        SpeechRecognizer.ERROR_NETWORK -> "নেটওয়ার্ক সমস্যা।"
-                        SpeechRecognizer.ERROR_AUDIO -> "মাইক্রোফোন অডিও সমস্যা।"
-                        else -> "স্পিচ এরর: $error"
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        isListening = true
+                        listener.onSpeechReady()
                     }
-                    Log.w(tag, "SpeechRecognizer error: $errorMsg ($error)")
-                    listener.onSpeechError(error, errorMsg)
 
-                    // If continuous mode, restart listening safely
-                    if (continuousMode && error == SpeechRecognizer.ERROR_NO_MATCH) {
-                        startListening(true)
+                    override fun onBeginningOfSpeech() {
+                        Log.d(tag, "User began speaking")
                     }
-                }
 
-                override fun onResults(results: Bundle?) {
-                    isListening = false
-                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    if (!matches.isNullOrEmpty()) {
-                        val spokenText = matches[0]
-                        Log.d(tag, "Recognized Bengali Speech: $spokenText")
-                        listener.onSpeechResult(spokenText)
-                    } else {
-                        listener.onSpeechError(SpeechRecognizer.ERROR_NO_MATCH, "কোনো কথা শনাক্ত করা যায়নি।")
+                    override fun onRmsChanged(rmsdB: Float) {
+                        listener.onSpeechRmsChanged(rmsdB)
                     }
-                }
 
-                override fun onPartialResults(partialResults: Bundle?) {
-                    val partialMatches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    if (!partialMatches.isNullOrEmpty()) {
-                        listener.onSpeechPartialResult(partialMatches[0])
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+
+                    override fun onEndOfSpeech() {
+                        isListening = false
+                        listener.onSpeechEnded()
                     }
-                }
 
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
+                    override fun onError(error: Int) {
+                        isListening = false
+                        val errorMsg = when (error) {
+                            SpeechRecognizer.ERROR_NO_MATCH -> "কথা স্পষ্ট শোনা যায়নি।"
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "কোনো কথা শনাক্ত হয়নি।"
+                            SpeechRecognizer.ERROR_NETWORK -> "নেটওয়ার্ক সমস্যা।"
+                            SpeechRecognizer.ERROR_AUDIO -> "মাইক্রোফোন অডিও সমস্যা।"
+                            else -> "স্পিচ এরর: $error"
+                        }
+                        Log.w(tag, "SpeechRecognizer error: $errorMsg ($error)")
+                        listener.onSpeechError(error, errorMsg)
+
+                        if (continuousMode && error == SpeechRecognizer.ERROR_NO_MATCH) {
+                            startListening(true)
+                        }
+                    }
+
+                    override fun onResults(results: Bundle?) {
+                        isListening = false
+                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        if (!matches.isNullOrEmpty()) {
+                            val spokenText = matches[0]
+                            Log.d(tag, "Recognized Bengali Speech: $spokenText")
+                            listener.onSpeechResult(spokenText)
+                        } else {
+                            listener.onSpeechError(SpeechRecognizer.ERROR_NO_MATCH, "কোনো কথা শনাক্ত করা যায়নি।")
+                        }
+                    }
+
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        val partialMatches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        if (!partialMatches.isNullOrEmpty()) {
+                            listener.onSpeechPartialResult(partialMatches[0])
+                        }
+                    }
+
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                })
+            }
         } catch (e: Exception) {
             Log.e(tag, "Exception during SpeechRecognizer initialization", e)
             listener.onSpeechError(-2, "স্পিচ রিকগনিশন শুরু করতে সমস্যা হয়েছে।")

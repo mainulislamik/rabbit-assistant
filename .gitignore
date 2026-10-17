@@ -23,8 +23,10 @@ server/audio_cache/*.mp3
 !server/audio_cache/.gitkeep
 
 # Releases
+releases/*.apk
 server/releases/*.apk
 !server/releases/.gitkeep
+
 
 # Expo
 node_modules/

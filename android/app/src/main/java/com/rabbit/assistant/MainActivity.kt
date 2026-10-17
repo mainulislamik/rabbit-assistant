@@ -22,8 +22,10 @@ import com.rabbit.assistant.update.UpdateManager
 import com.rabbit.assistant.voice.AudioStreamPlayer
 import com.rabbit.assistant.voice.SpeechRecognizerManager
 import java.io.File
+import android.util.Log
 
 class MainActivity : AppCompatActivity(),
+
     RabbitWebSocketClient.SocketEventListener,
     SpeechRecognizerManager.SpeechCallback,
     AudioStreamPlayer.PlaybackCallback,
@@ -61,8 +63,10 @@ class MainActivity : AppCompatActivity(),
     private val keyPort = "server_port"
 
     private val permissionReqCode = 2026
+    private val tag = "MainActivity"
 
     override fun onCreate(savedInstanceState: Bundle?) {
+
         super.onCreate(savedInstanceState)
         try {
             setContentView(R.layout.activity_main)

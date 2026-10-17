@@ -24,6 +24,9 @@ import edge_tts
 import urllib.request
 import urllib.parse
 
+from ubuntu_executor import handle_ubuntu_intent, is_ubuntu_action
+
+
 # ---------------------------------------------------------------------------
 # Logging & Setup
 # ---------------------------------------------------------------------------
@@ -70,22 +73,28 @@ RABBIT_SYSTEM_PROMPT = """You are "Rabbit" (র্যাবিট), a hyper-inte
 ```json
 {"action": "ACTION_NAME", "params": {}}
 ```
-Supported Device Actions:
+Supported Device Actions (executed on Android Phone):
 - FLASHLIGHT_ON: {"action": "FLASHLIGHT_ON"}
 - FLASHLIGHT_OFF: {"action": "FLASHLIGHT_OFF"}
 - VOLUME_UP: {"action": "VOLUME_UP"}
 - VOLUME_DOWN: {"action": "VOLUME_DOWN"}
 - VOLUME_MUTE: {"action": "VOLUME_MUTE"}
-- OPEN_APP: {"action": "OPEN_APP", "params": {"app_name": "whatsapp"}}
+- OPEN_APP: {"action": "OPEN_APP", "params": {"app_name": "whatsapp / youtube / settings"}}
 - MAKE_CALL: {"action": "MAKE_CALL", "params": {"phone_number": "017XXXXXXXX"}}
 - SEND_SMS: {"action": "SEND_SMS", "params": {"phone_number": "017XXXXXXXX", "message": "বার্তা"}}
 - CHECK_BATTERY: {"action": "CHECK_BATTERY"}
 - CHECK_DEVICE_INFO: {"action": "CHECK_DEVICE_INFO"}
 - SELF_UPDATE: {"action": "SELF_UPDATE"}
 
-Supported Host/Server Actions:
-- RUN_COMMAND: {"action": "RUN_COMMAND", "params": {"command": "df -h"}}
-- CHECK_SERVICES: {"action": "CHECK_SERVICES"}
+Supported Ubuntu PC / Host Actions (executed directly on Imon Sir's Ubuntu computer):
+- UBUNTU_COMMAND: {"action": "UBUNTU_COMMAND", "params": {"command": "ls -la"}} (can run ANY shell command: bash, git, docker, systemctl, etc.)
+- UBUNTU_OPEN_APP: {"action": "UBUNTU_OPEN_APP", "params": {"app_name": "chrome / code / terminal / anydesk / winbox / files"}}
+- UBUNTU_NOTIFICATION: {"action": "UBUNTU_NOTIFICATION", "params": {"title": "র্যাবিট", "message": "বার্তার বিষয়"}}
+- UBUNTU_VOLUME: {"action": "UBUNTU_VOLUME", "params": {"volume": "+10% / -10% / mute / 60%"}}
+- UBUNTU_STATUS: {"action": "UBUNTU_STATUS"} (reports Ubuntu RAM, CPU, disk, uptime)
+- UBUNTU_SCREENSHOT: {"action": "UBUNTU_SCREENSHOT"} (takes a screenshot of Ubuntu desktop)
+- UBUNTU_LOCK: {"action": "UBUNTU_LOCK"} (locks the Ubuntu desktop session)
+
 
 Keep your verbal response concise, dignified, and natural for speech."""
 
@@ -282,7 +291,17 @@ async def chat_endpoint(data: Dict[str, Any]):
         
     spoken_text, action_data = extract_actions(raw_reply)
     
+    # Check if the action is intended for Ubuntu Host execution
+    if action_data:
+        act_name = action_data.get("action", "")
+        if is_ubuntu_action(act_name):
+            logger.info(f"Executing Ubuntu host action from chat: {action_data}")
+            ok, out = handle_ubuntu_intent(act_name, action_data.get("params", {}))
+            if out:
+                logger.info(f"Ubuntu host action output: {out}")
+    
     # Generate speech
+
     audio_file = await synthesize_bangla_speech(spoken_text)
     audio_url = f"/api/audio/{audio_file.name}" if audio_file else None
 
@@ -403,12 +422,24 @@ async def websocket_voice_endpoint(websocket: WebSocket):
 
                 # Send action immediately if detected
                 if action_data:
+                    act_name = action_data.get("action", "")
+                    params = action_data.get("params", {})
                     logger.info(f"Emitting device action: {action_data}")
                     await websocket.send_json({
                         "type": "action",
-                        "action": action_data.get("action"),
-                        "params": action_data.get("params", {})
+                        "action": act_name,
+                        "params": params
                     })
+                    if is_ubuntu_action(act_name):
+                        logger.info(f"Executing Ubuntu host action from WS: {act_name}")
+                        ok, out = handle_ubuntu_intent(act_name, params)
+                        await websocket.send_json({
+                            "type": "ubuntu_result",
+                            "action": act_name,
+                            "success": ok,
+                            "output": out
+                        })
+
 
                 # Stream audio reply
                 await websocket.send_json({"type": "state", "state": "speaking"})
