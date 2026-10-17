@@ -54,6 +54,8 @@ class MainActivity : AppCompatActivity(),
     private lateinit var audioPlayer: AudioStreamPlayer
     private lateinit var actionHandler: DeviceActionHandler
     private lateinit var updateManager: UpdateManager
+    private var isManualUpdateCheck: Boolean = false
+
 
     private var outerRingAnimator: ObjectAnimator? = null
     private var middleRingAnimator: ObjectAnimator? = null
@@ -124,8 +126,10 @@ class MainActivity : AppCompatActivity(),
         }
 
         chipUpdate.setOnClickListener {
+            isManualUpdateCheck = true
             triggerSelfUpdateCheck(force = true)
         }
+
 
         chipServer.setOnClickListener {
             sendUserMessage("সার্ভার স্ট্যাটাস ও কানেকশন হেলথ কেমন?")
@@ -144,7 +148,10 @@ class MainActivity : AppCompatActivity(),
         updateManager = UpdateManager(this, this)
 
         wsClient.connect()
+        isManualUpdateCheck = false
+        triggerSelfUpdateCheck(force = false)
     }
+
 
     private fun initAnimations() {
         outerRingAnimator = ObjectAnimator.ofFloat(viewOuterRing, "rotation", 0f, 360f).apply {
@@ -295,8 +302,13 @@ class MainActivity : AppCompatActivity(),
             tvConnectionStatus.text = "ONLINE"
             tvConnectionStatus.setBackgroundResource(R.drawable.bg_pill_cyan)
             tvConnectionStatus.setTextColor(ContextCompat.getColor(this, R.color.cyan_primary))
+            
+            // Auto check for latest server release on connect (OTA update)
+            isManualUpdateCheck = false
+            triggerSelfUpdateCheck(force = false)
         }
     }
+
 
     override fun onDisconnected() {
         runOnUiThread {
@@ -417,7 +429,9 @@ class MainActivity : AppCompatActivity(),
     }
 
     override fun onNoUpdateAvailable() {
-        Toast.makeText(this, "আপনার র্যাবিট অ্যাপটি সম্পূর্ণ আপ-টু-ডেট আছে, স্যার।", Toast.LENGTH_SHORT).show()
+        if (isManualUpdateCheck) {
+            Toast.makeText(this, "আপনার র্যাবিট অ্যাপটি সম্পূর্ণ আপ-টু-ডেট আছে, স্যার।", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onDownloadProgress(percent: Int) {
@@ -429,8 +443,11 @@ class MainActivity : AppCompatActivity(),
     }
 
     override fun onUpdateError(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        if (isManualUpdateCheck) {
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        }
     }
+
 
     override fun onDestroy() {
         super.onDestroy()
