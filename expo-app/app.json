@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Rabbit Assistant",
+    "slug": "rabbit-assistant",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#050B14",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.rabbit.assistant.expo"
+    },
+    "android": {
+      "package": "com.rabbit.assistant.expo",
+      "versionCode": 100,
+      "adaptiveIcon": {
+        "backgroundColor": "#050B14",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.BATTERY_STATS",
+        "android.permission.REQUEST_INSTALL_PACKAGES"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow Rabbit Assistant to access your microphone for voice commands in Bengali."
+        }
+      ]
+    ],
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

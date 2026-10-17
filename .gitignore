@@ -25,3 +25,13 @@ server/audio_cache/*.mp3
 # Releases
 server/releases/*.apk
 !server/releases/.gitkeep
+
+# Expo
+node_modules/
+.expo/
+expo-app/node_modules/
+expo-app/.expo/
+expo-app/android/
+expo-app/ios/
+expo-app/output_apk/
+

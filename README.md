@@ -35,7 +35,26 @@
 
 ---
 
-## 🏗️ আর্কিটেকচার ওভারভিউ (System Architecture)
+## 📱 মোবাইল ক্লায়েন্ট অপশনসমূহ (Mobile Client Options)
+
+Rabbit Assistant দুটি উপায়ে অ্যান্ড্রয়েডে ব্যবহার করা যায়:
+
+### ১. Expo (React Native) অ্যাপ (`expo-app/`)
+- **Framework:** Expo SDK 58 + React Native
+- **ইন্টারফেস:** নিওন আর্ক-রিঅ্যাক্টর HUD, অ্যানিমেটেড পালস, বাংলা স্পিচ এবং অডিও স্ট্রিমিং।
+- **ডিভাইস কন্ট্রোল:** টর্চ লাইট, ব্যাটারি লেভেল মনিটরিং, ইউটিউব ও হোয়াটসঅ্যাপ শর্টকাট।
+- **বিল্ড মেথড:**
+  - **Expo Go (তাত্ক্ষণিক রান):** `cd expo-app && npx expo start` (ফোনে Expo Go অ্যাপ দিয়ে QR কোড স্ক্যান করুন)।
+  - **EAS Build (Expo.io Cloud):** `cd expo-app && npx eas-cli build -p android --profile preview` (সরাসরি `.apk` ফাইল তৈরি হবে)।
+  - **GitHub Actions:** গিটহাবে পুশ করলেই `.github/workflows/build-expo-apk.yml` ক্লাউডে স্বয়ংক্রিয়ভাবে APK বিল্ড করে Artifacts-এ আপলোড করে দেয়।
+
+### ২. নেটিভ অ্যান্ড্রয়েড কোটলিন অ্যাপ (`android/`)
+- **Language:** 100% Native Kotlin + Material Components
+- **বিল্ড:** GitHub Actions CI/CD (`build-apk.yml`) এর মাধ্যমে স্বয়ংক্রিয়ভাবে কম্পাইল হয়ে রিলিজ পেজে জমা হয়।
+
+---
+
+## 🛠️ সিস্টেম আর্কিটেকচার (System Architecture)
 
 ```
 ┌────────────────────────────────────────────────────────┐
