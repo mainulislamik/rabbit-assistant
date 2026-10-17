@@ -56,14 +56,15 @@ class DeviceActionHandler(
     }
 
     private fun setFlashlight(enable: Boolean): Boolean {
+        val cm = cameraManager ?: return false
         try {
-            val cameraId = cameraManager?.cameraIdList?.firstOrNull { id ->
-                cameraManager.getCameraCharacteristics(id)
+            val cameraId = cm.cameraIdList.firstOrNull { id ->
+                cm.getCameraCharacteristics(id)
                     .get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
             }
 
             if (cameraId != null) {
-                cameraManager.setTorchMode(cameraId, enable)
+                cm.setTorchMode(cameraId, enable)
                 isTorchOn = enable
                 val msg = if (enable) "টর্চ লাইট জ্বালানো হয়েছে, স্যার।" else "টর্চ লাইট বন্ধ করা হয়েছে, স্যার।"
                 actionCallback.onActionExecuted(if (enable) "FLASHLIGHT_ON" else "FLASHLIGHT_OFF", msg)

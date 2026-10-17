@@ -34,17 +34,17 @@ class AudioStreamPlayer(
                 )
                 setDataSource(context, Uri.parse(audioUrl))
                 setOnPreparedListener { mp ->
-                    isPlaying = true
+                    this@AudioStreamPlayer.isPlaying = true
                     mp.start()
                     listener.onPlaybackStarted()
                 }
                 setOnCompletionListener {
-                    isPlaying = false
+                    this@AudioStreamPlayer.isPlaying = false
                     listener.onPlaybackCompleted()
                     releasePlayer()
                 }
                 setOnErrorListener { _, what, extra ->
-                    isPlaying = false
+                    this@AudioStreamPlayer.isPlaying = false
                     val err = "Playback error: what=$what extra=$extra"
                     Log.e(tag, err)
                     listener.onPlaybackError(err)
@@ -54,7 +54,7 @@ class AudioStreamPlayer(
                 prepareAsync()
             }
         } catch (e: Exception) {
-            isPlaying = false
+            this@AudioStreamPlayer.isPlaying = false
             Log.e(tag, "Failed to initialize playback for $audioUrl", e)
             listener.onPlaybackError(e.localizedMessage ?: "Playback initialization failed")
         }
