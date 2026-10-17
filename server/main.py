@@ -512,14 +512,23 @@ async def check_updates(current_version: int = Query(default=100), manual: bool 
     apks = sorted(RELEASES_DIR.glob("*.apk"), key=os.path.getmtime, reverse=True)
     
     server_version = 104
-    # Only offer update if user manually requested it in settings
-    has_update = manual and (current_version < server_version)
-    
+    # If not a manual check, report version_code as 0 so old APKs never trigger a download
+    if not manual:
+        return {
+            "has_update": False,
+            "version_code": 0,
+            "version_name": "1.0.0",
+            "apk_url": None,
+            "release_notes": "Rabbit Universal Thin Client active. No update required.",
+            "sha256": "",
+            "mandatory": False
+        }
+
     if apks:
         latest_apk = apks[0]
         sha256 = hashlib.sha256(latest_apk.read_bytes()).hexdigest()
         return {
-            "has_update": has_update,
+            "has_update": current_version < server_version,
             "version_code": server_version,
             "version_name": "1.0.7",
             "apk_url": f"/api/updates/download/{latest_apk.name}",
@@ -530,8 +539,8 @@ async def check_updates(current_version: int = Query(default=100), manual: bool 
     
     return {
         "has_update": False,
-        "version_code": server_version,
-        "version_name": "1.0.6",
+        "version_code": 0,
+        "version_name": "1.0.0",
         "apk_url": None,
         "release_notes": "Rabbit is currently up to date.",
         "mandatory": False
