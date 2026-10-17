@@ -331,6 +331,107 @@ def control_desktop(action: str, value: Optional[str] = None, **kwargs) -> Dict[
     return {"action": action, "output": out, "success": ok}
 
 # ---------------------------------------------------------------------------
+# Tool 7: Long-Term Personal Knowledge Memory
+# ---------------------------------------------------------------------------
+def recall_personal_memory(query: str, **kwargs) -> Dict[str, Any]:
+    """Recall verified personal facts, projects, CV details, AdSense IDs, and servers for Imon Sir."""
+    try:
+        import rabbit_memory
+        return rabbit_memory.search_personal_memory(query)
+    except Exception as e:
+        return {"error": str(e), "found": False}
+
+# ---------------------------------------------------------------------------
+# Tool 8: Autonomous Multi-Agent Dev Team Dispatcher
+# ---------------------------------------------------------------------------
+def dispatch_dev_team(task_description: str, project_name: str = "general", **kwargs) -> Dict[str, Any]:
+    """Dispatch a software engineering task to the autonomous 5-member Dev Team (PM, Backend, Frontend, DevOps, QA)."""
+    workspace = Path("/home/imon/.hermes/agent-team/workspace")
+    workspace.mkdir(parents=True, exist_ok=True)
+    script = Path("/home/imon/.hermes/agent-team/dev-team.sh")
+    
+    task_file = workspace / "current_task.txt"
+    task_file.write_text(f"Project: {project_name}\nTask: {task_description}\nClient: Imon Sir\n")
+    
+    # Launch in background
+    cmd = f"nohup bash {script} dev-team '{task_description}' > {workspace}/team_runner.log 2>&1 &"
+    proc = subprocess.Popen(cmd, shell=True, cwd="/home/imon")
+    
+    return {
+        "status": "dispatched",
+        "message": f"ইমন স্যার, ৫ সদস্যের অটোনোমাস ডেভ টিমকে নির্দেশ দেওয়া হয়েছে। প্রজেক্ট: {project_name}। ব্যাকগ্রাউন্ডে কাজ শুরু হয়েছে।",
+        "pid": proc.pid,
+        "workspace": str(workspace)
+    }
+
+# ---------------------------------------------------------------------------
+# Tool 9: Launch Desktop Apps & Media
+# ---------------------------------------------------------------------------
+def launch_desktop_app(target: str, **kwargs) -> Dict[str, Any]:
+    """Launch Ubuntu desktop applications, VS Code workspaces, Chrome URLs, or background music."""
+    from ubuntu_executor import handle_ubuntu_intent
+    target_lower = target.lower()
+    
+    if "music" in target_lower or "lofi" in target_lower or "গান" in target_lower:
+        url = "https://www.youtube.com/results?search_query=lofi+coding+music+live"
+        ok, out = handle_ubuntu_intent("UBUNTU_OPEN_APP", {"url": url})
+        return {"target": target, "action": "open_music", "success": ok, "message": "ইউটিউবে ব্যাকগ্রাউন্ড কোডিং মিউজিক চালু করা হয়েছে।"}
+    elif "vscode" in target_lower or "code" in target_lower:
+        ok, out = handle_ubuntu_intent("UBUNTU_OPEN_APP", {"app": "code"})
+        return {"target": target, "action": "open_vscode", "success": ok, "message": "ভিএস কোড এডিটর লঞ্চ করা হয়েছে।"}
+    elif "chrome" in target_lower or "browser" in target_lower:
+        ok, out = handle_ubuntu_intent("UBUNTU_OPEN_APP", {"app": "chrome"})
+        return {"target": target, "action": "open_chrome", "success": ok, "message": "গুগল ক্রোম ব্রাউজার ওপেন করা হয়েছে।"}
+    else:
+        ok, out = handle_ubuntu_intent("UBUNTU_OPEN_APP", {"app": target})
+        return {"target": target, "action": "open_app", "success": ok, "output": out}
+
+# ---------------------------------------------------------------------------
+# Tool 10: Multimodal Vision Analysis
+# ---------------------------------------------------------------------------
+def analyze_visual_image(image_base64: str, prompt: str = "Analyze this visual image in detail in Bengali", **kwargs) -> Dict[str, Any]:
+    """Analyze an image using Gemini Multimodal Vision and return visual reasoning in Bengali."""
+    import httpx
+    omni_key = None
+    try:
+        cfg = json.loads(Path("/home/imon/.hermes/config.json").read_text())
+        omni_key = cfg.get("omniroute", {}).get("api_key")
+    except Exception:
+        pass
+    if not omni_key:
+        omni_key = os.getenv("OMNI_KEY")
+        
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {omni_key}"}
+    payload = {
+        "model": "agy/gemini-3.8-flash-tiered",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": f"You are Rabbit Vision AI assisting Imon Sir (ইমন স্যার). {prompt}. Respond in elegant, polite Bengali script."},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}}
+                ]
+            }
+        ],
+        "temperature": 0.2
+    }
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            r = client.post("http://127.0.0.1:20128/v1/chat/completions", headers=headers, json=payload)
+            if r.status_code == 200:
+                content = r.json()["choices"][0]["message"]["content"]
+                return {"success": True, "analysis": content}
+            return {"success": False, "error": f"HTTP {r.status_code}: {r.text}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+async def analyze_image_with_vision(image_base64: str, prompt: str = "এই ছবিটি দেখে বিস্তারিত বলুন", **kwargs) -> str:
+    res = analyze_visual_image(image_base64, prompt, **kwargs)
+    if res.get("success"):
+        return res.get("analysis", "ছবিটি সফলভাবে বিশ্লেষণ করা হয়েছে।")
+    return f"ছবিটি বিশ্লেষণ করার সময় সমস্যা হয়েছে: {res.get('error', 'অজানা ত্রুটি')}"
+
+# ---------------------------------------------------------------------------
 # Tool Specifications for LLM Function Calling (OpenAI / Gemini format)
 # ---------------------------------------------------------------------------
 RABBIT_TOOL_SPECS = [
@@ -490,6 +591,82 @@ RABBIT_TOOL_SPECS = [
                 "required": ["action"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recall_personal_memory",
+            "description": "Recall long-term verified facts, career background, CV, AdSense IDs, and infrastructure details for Imon Sir.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The concept, project, or detail to look up (e.g. 'AdSense', 'Shopping Zone BD', 'Arcadex', 'StockWhisk', 'OptiPlex specs')."
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dispatch_dev_team",
+            "description": "Trigger the autonomous 5-member AI Dev Team (PM, Backend, Frontend, DevOps, QA) to solve a complex coding task or feature.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_description": {
+                        "type": "string",
+                        "description": "Detailed task description for the engineering team."
+                    },
+                    "project_name": {
+                        "type": "string",
+                        "description": "Target project name (e.g. 'AmarPDF', 'StockWhisk', 'TryCalc', 'MessSaaS', 'General')."
+                    }
+                },
+                "required": ["task_description"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "launch_desktop_app",
+            "description": "Launch Ubuntu desktop applications, VS Code workspaces, Chrome browser, or play coding music on YouTube.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target": {
+                        "type": "string",
+                        "description": "Target to open or play: 'vscode', 'chrome', 'music', 'lofi', 'terminal', 'nautilus', etc."
+                    }
+                },
+                "required": ["target"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_visual_image",
+            "description": "Perform multimodal AI visual inspection and reasoning on an image or screenshot in Bengali.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "image_base64": {
+                        "type": "string",
+                        "description": "Base64-encoded image string."
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "What to inspect or question about the image."
+                    }
+                },
+                "required": ["image_base64"]
+            }
+        }
     }
 ]
 
@@ -507,6 +684,10 @@ TOOL_MAP = {
     "get_system_health": get_system_health,
     "get_project_context": get_project_context,
     "control_desktop": control_desktop,
+    "recall_personal_memory": recall_personal_memory,
+    "dispatch_dev_team": dispatch_dev_team,
+    "launch_desktop_app": launch_desktop_app,
+    "analyze_visual_image": analyze_visual_image,
 }
 
 def dispatch_tool(tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:

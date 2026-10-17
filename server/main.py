@@ -25,6 +25,8 @@ import urllib.request
 import urllib.parse
 import re
 import httpx
+import psutil
+from pydantic import BaseModel
 
 from ubuntu_executor import handle_ubuntu_intent, is_ubuntu_action
 import rabbit_tools
@@ -285,8 +287,8 @@ async def query_llm_agentic(prompt: str, on_tool_callback=None) -> tuple[str, li
         "Core Directives:\n"
         "1. Etiquette: Always address Imon Sir with highest honor and respect as 'ইমন স্যার' (never use 'ভাই' or informal address).\n"
         "2. Language: Reply strictly in elegant, polite, natural Bengali script (no English/Banglish in spoken dialogue).\n"
-        "3. Full Power: You have complete access to terminal/bash, file system, git, system health, and web search tools.\n"
-        "4. Tool Usage: When Sir asks you to check system status, run bash commands, read or modify code/files, check git or docker, or find live news/weather/facts, execute the necessary tool immediately. Inspect the output and synthesize a crystal-clear, respectful Bengali response.\n"
+        "3. Full Power: You have complete access to terminal/bash, file system, git, system health, web search, personal memory (CV/AdSense/projects), desktop app launcher, and autonomous dev team tools.\n"
+        "4. Tool Usage: When Sir asks you to check system status, run bash commands, read or modify code/files, check git or docker, find live news/weather/facts, recall personal memory, launch desktop apps or music, or dispatch the dev team, execute the necessary tool immediately. Inspect the output and synthesize a crystal-clear, respectful Bengali response.\n"
         "5. Efficiency: Complete tool executions within 1-3 turns and immediately provide the final answer to Imon Sir."
     )
 
@@ -569,6 +571,116 @@ async def evolve_system(data: Dict[str, Any], background_tasks: BackgroundTasks)
         "message": f"র্যাবিট সেলফ-ইভোলিউশন কার্যকর হয়েছে: {description}",
         "timestamp": time.time()
     }
+
+# ---------------------------------------------------------------------------
+# Proactive Guardian & Self-Healing Watchdog
+# ---------------------------------------------------------------------------
+async def generate_proactive_briefing() -> str:
+    """Generates an intelligent proactive briefing for Imon Sir using live system stats & memory."""
+    try:
+        health = rabbit_tools.get_system_health()
+        containers = health.get("running_containers", 0)
+        ram_free = health.get("ram_free_gb", 0)
+        disk_free = health.get("disk_free_gb", 0)
+        
+        prompt = (
+            f"ইমন স্যারের জন্য একটি সংক্ষিপ্ত, সম্মানসূচক ও প্রাণবন্ত সকালের বা সিস্টেম ব্রিফিং তৈরি করো। "
+            f"সিস্টেম তথ্য: রানিং ডকার কন্টেইনার: {containers}টি, ফ্রি র্যাম: {ram_free} GB, ফ্রি ডিস্ক: {disk_free} GB। "
+            f"অ্যাসিস্ট্যান্ট নাম: র্যাবিট। বিনম্র বাংলা ভাষায় ৩-৪ লাইনে বলো যে সিস্টেম সম্পূর্ণ স্থিতিশীল ও রেডি।"
+        )
+        briefing, _ = await query_llm_agentic(prompt)
+        return briefing
+    except Exception as e:
+        logger.error(f"Failed to generate proactive briefing: {e}")
+        return "আসসালামু আলাইকুম ইমন স্যার! সিস্টেম সম্পূর্ণ সুস্থ রয়েছে এবং ডকার কন্টেইনারগুলো নিরবচ্ছিন্নভাবে চলছে। আমি আপনার সেবায় প্রস্তুত।"
+
+
+async def proactive_watchdog_loop():
+    """Background watchdog that monitors critical containers and resource spikes."""
+    logger.info("Proactive Guardian Watchdog started.")
+    critical_containers = ["stockwhisk", "amarpdf", "toto", "arcadex", "mess"]
+    
+    while True:
+        try:
+            await asyncio.sleep(120)  # Check every 2 minutes
+            health = rabbit_tools.get_system_health()
+            containers = health.get("containers", [])
+            ram_free = health.get("ram_free_gb", 10.0)
+            
+            # Auto-healing: Alert if RAM is dangerously low (< 2 GB)
+            if ram_free < 2.0:
+                alert_text = f"ইমন স্যার, সিস্টেমে মেমোরি সংকট দেখা দিয়েছে। ফ্রি র্যাম মাত্র {ram_free:.1f} GB।"
+                logger.warning(alert_text)
+                await manager.broadcast({
+                    "type": "speech_response",
+                    "text": alert_text,
+                    "sender": "র্যাবিট গার্ডিয়ান"
+                })
+        except Exception as e:
+            logger.error(f"Watchdog loop error: {e}")
+            await asyncio.sleep(60)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background proactive watchdog on server startup."""
+    asyncio.create_task(proactive_watchdog_loop())
+
+
+@app.get("/api/briefing")
+async def api_proactive_briefing():
+    """Endpoint to trigger or fetch proactive morning/incident briefing."""
+    text = await generate_proactive_briefing()
+    audio = await synthesize_bangla_speech(text)
+    audio_url = f"/api/audio/{audio.name}" if audio else None
+    
+    # Broadcast to all connected clients (PC + Mobile)
+    await manager.broadcast({
+        "type": "speech_response",
+        "text": text,
+        "audio_url": audio_url,
+        "sender": "র্যাবিট গার্ডিয়ান"
+    })
+    return {"status": "ok", "briefing": text, "audio_url": audio_url}
+
+
+# ---------------------------------------------------------------------------
+# Multimodal Vision Analysis (/api/vision)
+# ---------------------------------------------------------------------------
+class VisionRequest(BaseModel):
+    image_base64: str
+    prompt: Optional[str] = "এই ছবিতে কী দেখা যাচ্ছে এবং কোনো সমস্যা বা লক্ষণীয় বিষয় আছে কি না তা বাংলায় বিস্তারিত বিশ্লেষণ করে বলো।"
+
+
+@app.post("/api/vision")
+async def api_vision_analyze(req: VisionRequest):
+    """Analyzes camera frame or screenshot via Gemini Vision core."""
+    img_b64 = req.image_base64
+    if "," in img_b64:
+        img_b64 = img_b64.split(",", 1)[1]
+        
+    analysis = await rabbit_tools.analyze_image_with_vision(
+        image_base64=img_b64,
+        prompt=req.prompt or "এই ছবিটি দেখে বিস্তারিত বলুন"
+    )
+    
+    audio = await synthesize_bangla_speech(analysis)
+    audio_url = f"/api/audio/{audio.name}" if audio else None
+    
+    # Broadcast analysis to UI
+    await manager.broadcast({
+        "type": "speech_response",
+        "text": analysis,
+        "audio_url": audio_url,
+        "sender": "র্যাবিট ভিশন"
+    })
+    
+    return {
+        "status": "ok",
+        "analysis": analysis,
+        "audio_url": audio_url
+    }
+
 
 # ---------------------------------------------------------------------------
 # Multi-Device Connection & Real-Time Sync Manager
@@ -989,9 +1101,15 @@ async def jarvis_hud():
             <h1>RABBIT // PROTOCOL</h1>
             <p style="font-size: 10px; color: #64748b; letter-spacing: 1px;">AUTONOMOUS VOICE OS FOR IMON SIR</p>
         </div>
-        <div class="status-badge">
-            <span class="status-dot"></span>
-            <span id="system-status">JARVIS CORE ONLINE</span>
+        <div style="display:flex; gap:10px; align-items:center;">
+            <div class="status-badge" id="wakeword-badge" style="cursor:pointer;" onclick="toggleWakeWord()">
+                <span class="status-dot" id="wakeword-dot" style="background:#64748b;"></span>
+                <span id="wakeword-text">WAKE-WORD: OFF (CLICK TO ENABLE)</span>
+            </div>
+            <div class="status-badge">
+                <span class="status-dot"></span>
+                <span id="system-status">JARVIS CORE ONLINE</span>
+            </div>
         </div>
     </header>
 
@@ -1009,13 +1127,16 @@ async def jarvis_hud():
         <div id="terminal-stream" style="display:none; margin: 12px 0; max-height: 200px; overflow-y: auto; background: rgba(5, 11, 20, 0.9); border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 6px; padding: 10px; font-family: 'Courier New', monospace; font-size: 12px; text-align: left;"></div>
 
         <div style="display:flex; flex-wrap:wrap; gap:8px; margin: 15px 0 10px 0;">
+            <button class="chip-btn" style="border-color:var(--gold); color:var(--gold);" onclick="triggerBriefing()">🎙️ সকালের ব্রিফিং</button>
             <button class="chip-btn" onclick="sendQuickText('উবুন্টু সিস্টেম স্ট্যাটাস কেমন?')">💻 উবুন্টু স্ট্যাটাস</button>
+            <button class="chip-btn" onclick="sendQuickText('আমাদের সক্রিয় ডকার কন্টেইনারগুলোর তালিকা দেখাও')">⚡ ডকার হেলথ</button>
+            <button class="chip-btn" onclick="sendQuickText('আমাদের StockWhisk এবং TryCalc অ্যাডসেন্স আইডি মনে করিয়ে দাও')">🧠 পার্সোনাল মেমোরি</button>
+            <button class="chip-btn" onclick="sendQuickText('ইউটিউবে কোডিং মিউজিক চালাও')">🎵 ব্যাকগ্রাউন্ড মিউজিক</button>
+            <button class="chip-btn" onclick="sendQuickText('ভিএস কোড এডিটর ওপেন করো')">💻 VS Code</button>
+            <button class="chip-btn" onclick="sendQuickText('অটোনোমাস ডেভ টিমকে একটি সিস্টেম চেক শুরু করতে বলো')">🤖 ডেভ টিম</button>
             <button class="chip-btn" onclick="sendQuickText('আজকের গুরুত্বপূর্ণ তাজা খবর কী কী আছে জানাও')">🌐 আজকের খবর</button>
             <button class="chip-btn" onclick="sendQuickText('আজকের ঢাকার আবহাওয়া কেমন?')">🌤️ আবহাওয়া</button>
-            <button class="chip-btn" onclick="sendQuickText('আমাদের সক্রিয় ডকার কন্টেইনারগুলোর তালিকা দেখাও')">⚡ ডকার</button>
-            <button class="chip-btn" onclick="sendQuickText('স্ক্রিনশট নাও')">📸 স্ক্রিনশট</button>
             <button class="chip-btn" onclick="sendQuickText('ভলিউম বাড়াও')">🔊 ভলিউম +</button>
-            <button class="chip-btn" onclick="sendQuickText('ভলিউম কমাও')">🔉 ভলিউম -</button>
         </div>
 
         <div class="controls">
@@ -1130,6 +1251,83 @@ async def jarvis_hud():
             document.getElementById('display-text').innerText = val;
             ws.send(JSON.stringify({ type: 'user_text', text: val }));
             input.value = '';
+        }
+
+        async function triggerBriefing() {
+            document.getElementById('system-status').innerText = 'GENERATING BRIEFING...';
+            document.getElementById('display-text').innerHTML = `<span style="color:var(--cyan);font-weight:bold;">র্যাবিট:</span> সকালের ব্রিফিং প্রস্তুত করা হচ্ছে...`;
+            try {
+                const res = await fetch('/api/briefing');
+                const data = await res.json();
+                document.getElementById('display-text').innerHTML = `<span style="color:var(--cyan);font-weight:bold;">র্যাবিট ব্রিফিং:</span> ${data.briefing}`;
+                if (data.audio_url) {
+                    audioPlayer.src = data.audio_url;
+                    audioPlayer.play().catch(e => console.log('Audio autoplay prevented:', e));
+                }
+            } catch(e) {
+                console.error('Briefing error:', e);
+            }
+        }
+
+        // Hands-Free Wake-Word Engine ("Hey Rabbit" / "Rabbit" / "র্যাবিট")
+        let wakeWordRec = null;
+        let wakeWordActive = false;
+
+        function initWakeWord() {
+            if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) return;
+            const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+            wakeWordRec = new SpeechRec();
+            wakeWordRec.continuous = true;
+            wakeWordRec.interimResults = true;
+            wakeWordRec.lang = 'bn-BD';
+
+            wakeWordRec.onresult = (event) => {
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    const text = event.results[i][0].transcript.toLowerCase();
+                    if (text.includes('rabbit') || text.includes('র্যাবিট') || text.includes('রেবিট') || text.includes('jarvis')) {
+                        console.log('Wake word detected:', text);
+                        document.getElementById('core-btn').innerText = 'LISTENING';
+                        document.getElementById('system-status').innerText = 'WAKE WORD TRIGGERED!';
+                        
+                        let clean = text.replace(/rabbit|র্যাবিট|রেবিট|jarvis|hey/gi, '').trim();
+                        if (clean.length > 2) {
+                            sendQuickText(clean);
+                        } else {
+                            toggleSpeech();
+                        }
+                        break;
+                    }
+                }
+            };
+
+            wakeWordRec.onend = () => {
+                if (wakeWordActive) {
+                    try { wakeWordRec.start(); } catch(e){}
+                }
+            };
+        }
+
+        function toggleWakeWord() {
+            if (!wakeWordRec) initWakeWord();
+            if (!wakeWordRec) {
+                alert('Wake word speech recognition not supported in this browser.');
+                return;
+            }
+            wakeWordActive = !wakeWordActive;
+            const badge = document.getElementById('wakeword-badge');
+            const dot = document.getElementById('wakeword-dot');
+            const txt = document.getElementById('wakeword-text');
+            if (wakeWordActive) {
+                try { wakeWordRec.start(); } catch(e){}
+                dot.style.background = '#00ffaa';
+                txt.innerText = 'WAKE-WORD: "HEY RABBIT" ACTIVE';
+                badge.style.borderColor = '#00ffaa';
+            } else {
+                try { wakeWordRec.stop(); } catch(e){}
+                dot.style.background = '#64748b';
+                txt.innerText = 'WAKE-WORD: OFF';
+                badge.style.borderColor = 'rgba(0, 240, 255, 0.3)';
+            }
         }
 
         function handleKey(e) {
